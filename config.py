@@ -14,7 +14,7 @@ STRATEGY = {
     "macd_fast": 12,
     "macd_slow": 26,
     "macd_signal": 9,
-    "signal_threshold": 2,   # min score (+/-3 max) to open a position
+    "signal_threshold": 1,   # min score (+/-3 max) to open a position
     "max_positions": 5,
 }
 
