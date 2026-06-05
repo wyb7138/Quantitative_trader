@@ -1,8 +1,141 @@
 {
-  "capital": 100000.0,
-  "positions": {},
-  "entry_prices": {},
-  "peak_value": 100000.0,
-  "trades": [],
+  "capital": 26333.475969078077,
+  "positions": {
+    "PFE": 573,
+    "META": 23,
+    "HD": 48,
+    "AVGO": 35,
+    "MSFT": 35
+  },
+  "entry_prices": {
+    "PFE": 26.14,
+    "META": 632.51,
+    "HD": 309.95,
+    "AVGO": 418.91,
+    "MSFT": 428.05
+  },
+  "peak_value": 100099.12352022553,
+  "trades": [
+    {
+      "time": "2026-05-29 19:18:30",
+      "symbol": "HD",
+      "action": "BUY",
+      "shares": 46,
+      "price": 321.21,
+      "pnl": 0
+    },
+    {
+      "time": "2026-05-29 19:18:30",
+      "symbol": "PFE",
+      "action": "BUY",
+      "shares": 573,
+      "price": 26.14,
+      "pnl": 0
+    },
+    {
+      "time": "2026-05-29 19:18:30",
+      "symbol": "ABBV",
+      "action": "BUY",
+      "shares": 68,
+      "price": 218.63,
+      "pnl": 0
+    },
+    {
+      "time": "2026-05-29 19:18:30",
+      "symbol": "TSLA",
+      "action": "BUY",
+      "shares": 33,
+      "price": 442.1,
+      "pnl": 0
+    },
+    {
+      "time": "2026-05-29 19:18:30",
+      "symbol": "JNJ",
+      "action": "BUY",
+      "shares": 64,
+      "price": 230.8,
+      "pnl": 0
+    },
+    {
+      "time": "2026-05-30 02:42:46",
+      "symbol": "HD",
+      "action": "SELL",
+      "shares": 46,
+      "price": 317.14,
+      "pnl": -201.81
+    },
+    {
+      "time": "2026-05-30 02:42:46",
+      "symbol": "TSLA",
+      "action": "SELL",
+      "shares": 33,
+      "price": 435.79,
+      "pnl": -222.61
+    },
+    {
+      "time": "2026-05-30 02:42:46",
+      "symbol": "META",
+      "action": "BUY",
+      "shares": 23,
+      "price": 632.51,
+      "pnl": 0
+    },
+    {
+      "time": "2026-05-30 02:42:46",
+      "symbol": "BAC",
+      "action": "BUY",
+      "shares": 287,
+      "price": 51.6,
+      "pnl": 0
+    },
+    {
+      "time": "2026-06-05 16:49:41",
+      "symbol": "ABBV",
+      "action": "SELL",
+      "shares": 68,
+      "price": 224.94,
+      "pnl": 413.78
+    },
+    {
+      "time": "2026-06-05 16:49:41",
+      "symbol": "JNJ",
+      "action": "SELL",
+      "shares": 64,
+      "price": 228.17,
+      "pnl": -182.92
+    },
+    {
+      "time": "2026-06-05 16:49:41",
+      "symbol": "BAC",
+      "action": "SELL",
+      "shares": 287,
+      "price": 54.17,
+      "pnl": 722.04
+    },
+    {
+      "time": "2026-06-05 16:49:41",
+      "symbol": "HD",
+      "action": "BUY",
+      "shares": 48,
+      "price": 309.95,
+      "pnl": 0
+    },
+    {
+      "time": "2026-06-05 16:49:41",
+      "symbol": "AVGO",
+      "action": "BUY",
+      "shares": 35,
+      "price": 418.91,
+      "pnl": 0
+    },
+    {
+      "time": "2026-06-05 16:49:41",
+      "symbol": "MSFT",
+      "action": "BUY",
+      "shares": 35,
+      "price": 428.05,
+      "pnl": 0
+    }
+  ],
   "started": "2026-05-29T18:57:31.766896"
 }
