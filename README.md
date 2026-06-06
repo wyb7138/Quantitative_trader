@@ -46,6 +46,31 @@ The UI is a thin client over a JSON API (handy for scripting too):
 The web layer reuses the existing engines unchanged — it only adds
 serialisation (`web/services.py`) and routing (`web/app.py`).
 
+## Deploy to AWS (App Runner)
+
+The dashboard runs as a container on [AWS App Runner], reading live portfolio
+state and trade history from the same DynamoDB tables / S3 cache the scheduled
+paper-trading Lambda writes to.
+
+```bash
+bash aws/setup.sh        # one-time: S3 cache, DynamoDB tables, Lambda, schedule
+bash aws/deploy_web.sh   # build image, push to ECR, create the App Runner service
+```
+
+`deploy_web.sh` creates an ECR repository, the two IAM roles App Runner needs
+(an ECR access role to pull the image and an instance role carrying
+`aws/iam_policy.json` for DynamoDB/S3 access), and the App Runner service —
+wired to `STATE_TABLE` / `TRADES_TABLE` / `CACHE_BUCKET` and health-checked at
+`/api/health`. It prints the public HTTPS URL when done.
+
+The container is defined by the repo `Dockerfile` (gunicorn serving
+`web:create_app()` on port 8080) and can run on any container host.
+
+> The App Runner URL is public and unauthenticated — put it behind auth or
+> restrict access before exposing real trading data.
+
+[AWS App Runner]: https://docs.aws.amazon.com/apprunner/
+
 ## Command line
 
 ```bash

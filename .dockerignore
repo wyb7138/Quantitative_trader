@@ -1,0 +1,23 @@
+# Keep the image small and free of local-only state.
+# In production the app reads state from DynamoDB / S3, not these files.
+
+.git
+.gitignore
+.claude/
+
+__pycache__/
+*.pyc
+*.pyo
+
+# Local parquet cache can be hundreds of MB — prod uses the S3 cache
+data/cache/
+
+# Local-mode portfolio / trade state (DynamoDB is used in prod)
+paper_trader/*.json
+
+# Build / report artefacts
+backtest_results.png
+trades_export.csv
+
+# Docs not needed at runtime
+*.md
