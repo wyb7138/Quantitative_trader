@@ -192,13 +192,19 @@ python3 -m pip install \
   protobuf \
   websockets
 
-# Copy only the Python source modules Lambda needs
-cp -r backtest config.py data lambda_handler.py main.py paper_trader portfolio strategy \
-  /tmp/lambda_pkg/
+# Copy only the Python source modules Lambda needs.
+# data/ is copied file-by-file to avoid pulling in data/cache/ (which can be
+# hundreds of MB of parquet files from local backtests).
+cp -r backtest paper_trader portfolio strategy /tmp/lambda_pkg/
+cp config.py lambda_handler.py main.py /tmp/lambda_pkg/
+mkdir -p /tmp/lambda_pkg/data
+cp data/__init__.py data/fetcher.py /tmp/lambda_pkg/data/
+
+echo "   Pre-zip contents (top items by size):"
+du -sh /tmp/lambda_pkg/* 2>/dev/null | sort -rh | head -15
+echo "   Total pre-zip: $(du -sh /tmp/lambda_pkg | cut -f1)"
 
 cd /tmp/lambda_pkg && zip -r /tmp/quant_lambda.zip . \
-  -x "*.git*" \
-  -x "data/cache/*" \
   -x "*.pyc" \
   -x "*/__pycache__/*" \
   -x "*.dist-info/*" \
