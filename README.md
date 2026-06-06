@@ -1,0 +1,98 @@
+# Quant Trader
+
+A quantitative algorithmic trading agent (mean reversion + momentum using RSI,
+Bollinger Bands, and MACD) with a CLI, a paper-trading loop, a backtesting
+engine, and a **browser dashboard**.
+
+## Install
+
+```bash
+pip install -r requirements.txt
+```
+
+## Web dashboard
+
+Launch the UI and open it in your browser:
+
+```bash
+python main.py web                 # http://127.0.0.1:5000
+python main.py web --port 8080     # custom port
+python run_web.py                  # equivalent entry point
+```
+
+The dashboard has four tabs:
+
+| Tab        | What it does                                                              |
+|------------|--------------------------------------------------------------------------|
+| **Dashboard** | Live paper-portfolio value, cash, return, drawdown, open positions; run a trading tick on demand. |
+| **Signals**   | Current RSI / Bollinger / MACD composite scores ranked across the universe, with BUY/SELL flags. |
+| **Backtest**  | Run a historical backtest over any symbols / date range; interactive equity-curve and drawdown charts, performance metrics, and the trade blotter. |
+| **Trades**    | Persisted trade history with win-rate / P&L stats, filterable by symbol. |
+
+### HTTP API
+
+The UI is a thin client over a JSON API (handy for scripting too):
+
+| Method | Endpoint            | Description                         |
+|--------|---------------------|-------------------------------------|
+| GET    | `/api/config`       | Universe + strategy/portfolio config |
+| GET    | `/api/signals`      | Current signals (`?symbols=AAPL,MSFT`) |
+| POST   | `/api/backtest`     | Run a backtest (`{symbols, start, end}`) |
+| GET    | `/api/trades`       | Trade history + stats (`?symbol=&limit=`) |
+| GET    | `/api/portfolio`    | Paper-portfolio snapshot            |
+| POST   | `/api/paper/tick`   | Execute one paper-trading tick      |
+| GET    | `/api/health`       | Liveness probe                      |
+
+The web layer reuses the existing engines unchanged — it only adds
+serialisation (`web/services.py`) and routing (`web/app.py`).
+
+## Deploy to AWS (App Runner)
+
+The dashboard runs as a container on [AWS App Runner], reading live portfolio
+state and trade history from the same DynamoDB tables / S3 cache the scheduled
+paper-trading Lambda writes to.
+
+```bash
+bash aws/setup.sh        # one-time: S3 cache, DynamoDB tables, Lambda, schedule
+bash aws/deploy_web.sh   # build image, push to ECR, create the App Runner service
+```
+
+`deploy_web.sh` creates an ECR repository, the two IAM roles App Runner needs
+(an ECR access role to pull the image and an instance role carrying
+`aws/iam_policy.json` for DynamoDB/S3 access), and the App Runner service —
+wired to `STATE_TABLE` / `TRADES_TABLE` / `CACHE_BUCKET` and health-checked at
+`/api/health`. It prints the public HTTPS URL when done.
+
+The container is defined by the repo `Dockerfile` (gunicorn serving
+`web:create_app()` on port 8080) and can run on any container host.
+
+> The App Runner URL is public and unauthenticated — put it behind auth or
+> restrict access before exposing real trading data.
+
+[AWS App Runner]: https://docs.aws.amazon.com/apprunner/
+
+## Command line
+
+```bash
+python main.py backtest --start 2022-01-01 --end 2024-12-31
+python main.py signals --symbols AAPL TSLA
+python main.py paper --poll 300
+python main.py trades --symbol AAPL
+```
+
+## Architecture
+
+```
+config.py            Universe + strategy / portfolio / data parameters
+data/fetcher.py      yfinance download with parquet cache (local or S3)
+strategy/            Indicators (RSI, BB, MACD) and composite signal scoring
+backtest/            Daily-bar backtest engine + performance metrics
+paper_trader/        Paper-trading loop, state + trade persistence
+web/                 Flask app, services, and the dashboard UI
+main.py              CLI entry point (backtest | signals | paper | trades | web)
+lambda_handler.py    AWS Lambda entry point for the paper-trading tick
+```
+
+State and caching transparently use AWS (S3 / DynamoDB / SNS / CloudWatch)
+when the corresponding environment variables are set, and fall back to local
+files otherwise — so the app runs with or without AWS credentials.

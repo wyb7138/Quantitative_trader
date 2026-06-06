@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quant Trader</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◈</span>
+      <div>
+        <h1>Quant Trader</h1>
+        <p class="tagline">Mean Reversion + Momentum · RSI · Bollinger · MACD</p>
+      </div>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="signals">Signals</button>
+      <button class="tab" data-tab="backtest">Backtest</button>
+      <button class="tab" data-tab="trades">Trades</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ── DASHBOARD ─────────────────────────────────────────────────── -->
+    <section id="dashboard" class="panel active">
+      <div class="panel-head">
+        <h2>Paper Portfolio</h2>
+        <div class="actions">
+          <span id="price-flag" class="flag hidden"></span>
+          <button id="refresh-portfolio" class="btn ghost">Refresh</button>
+          <button id="run-tick" class="btn primary">Run Tick</button>
+        </div>
+      </div>
+
+      <div class="cards" id="portfolio-cards"></div>
+
+      <h3 class="section-title">Open Positions</h3>
+      <div class="table-wrap">
+        <table id="positions-table">
+          <thead>
+            <tr>
+              <th>Symbol</th><th class="num">Shares</th><th class="num">Entry</th>
+              <th class="num">Price</th><th class="num">Market Value</th><th class="num">P&amp;L %</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── SIGNALS ───────────────────────────────────────────────────── -->
+    <section id="signals" class="panel">
+      <div class="panel-head">
+        <h2>Current Signals</h2>
+        <div class="actions">
+          <input id="signal-symbols" class="input" placeholder="AAPL MSFT NVDA (blank = full universe)" />
+          <button id="load-signals" class="btn primary">Load Signals</button>
+        </div>
+      </div>
+      <p class="hint" id="signals-asof"></p>
+      <div class="table-wrap">
+        <table id="signals-table">
+          <thead>
+            <tr>
+              <th>Symbol</th><th class="num">Score</th><th class="num">Close</th>
+              <th class="num">RSI</th><th class="num">RSI</th><th class="num">BB</th>
+              <th class="num">MACD</th><th>Signal</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── BACKTEST ──────────────────────────────────────────────────── -->
+    <section id="backtest" class="panel">
+      <div class="panel-head">
+        <h2>Backtest</h2>
+      </div>
+      <form id="backtest-form" class="form-row">
+        <label>Symbols
+          <input id="bt-symbols" class="input" placeholder="blank = full universe" />
+        </label>
+        <label>Start
+          <input id="bt-start" class="input" type="date" />
+        </label>
+        <label>End
+          <input id="bt-end" class="input" type="date" />
+        </label>
+        <button type="submit" class="btn primary">Run Backtest</button>
+      </form>
+
+      <div id="bt-status" class="hint"></div>
+
+      <div id="bt-results" class="hidden">
+        <div class="cards" id="metrics-cards"></div>
+
+        <h3 class="section-title">Equity Curve</h3>
+        <div class="chart-box"><canvas id="equity-chart"></canvas></div>
+
+        <h3 class="section-title">Drawdown</h3>
+        <div class="chart-box small"><canvas id="drawdown-chart"></canvas></div>
+
+        <h3 class="section-title">Trades <span id="bt-trade-count" class="muted"></span></h3>
+        <div class="table-wrap scroll">
+          <table id="bt-trades-table">
+            <thead>
+              <tr><th>Date</th><th>Symbol</th><th>Action</th><th class="num">Shares</th><th class="num">Price</th><th class="num">P&amp;L</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── TRADES ────────────────────────────────────────────────────── -->
+    <section id="trades" class="panel">
+      <div class="panel-head">
+        <h2>Trade History</h2>
+        <div class="actions">
+          <input id="trade-symbol" class="input" placeholder="Filter symbol (optional)" />
+          <button id="load-trades" class="btn primary">Load</button>
+        </div>
+      </div>
+      <div class="cards" id="trade-stats"></div>
+      <div class="table-wrap">
+        <table id="trades-table">
+          <thead>
+            <tr><th>Time</th><th>Symbol</th><th>Action</th><th class="num">Shares</th><th class="num">Price</th><th class="num">P&amp;L</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

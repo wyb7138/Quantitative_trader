@@ -80,9 +80,12 @@ aws sns subscribe --topic-arn "${TOPIC_ARN}" --protocol email \
   --notification-endpoint "${ALERT_EMAIL}" --region "${REGION}"
 echo "   Check your email to confirm the SNS subscription."
 
-# 4. CloudWatch log group
+# 4. CloudWatch log group (with retention so logs don't accumulate forever)
 echo "→ CloudWatch log group: ${LOG_GROUP}"
 aws logs create-log-group --log-group-name "${LOG_GROUP}" --region "${REGION}" 2>/dev/null || echo "   Already exists — skipping."
+aws logs put-retention-policy --log-group-name "${LOG_GROUP}" \
+  --retention-in-days 14 --region "${REGION}" 2>/dev/null \
+  && echo "   Retention set to 14 days." || true
 
 # 5. IAM role for Lambda
 echo "→ IAM role: ${LAMBDA_ROLE}"
@@ -258,11 +261,15 @@ fi
 
 LAMBDA_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${LAMBDA_FUNCTION}"
 
-# 7. EventBridge rule — put-rule is idempotent
-echo "→ EventBridge schedule (every 1 minute)"
+# 7. EventBridge rule — put-rule is idempotent.
+# Fire every minute only during US market hours instead of 24/7, which cuts
+# Lambda invocations (and their CloudWatch log volume) by ~75%.  The cron is
+# in UTC; 13:00-21:59 UTC is a DST-safe superset covering US market hours
+# (09:30-16:00 ET) in both EST and EDT, Mon-Fri.
+echo "→ EventBridge schedule (every minute, US market hours, Mon-Fri)"
 aws events put-rule \
   --name quant-paper-tick \
-  --schedule-expression "rate(1 minute)" \
+  --schedule-expression "cron(* 13-21 ? * MON-FRI *)" \
   --state ENABLED \
   --region "${REGION}"
 
@@ -287,8 +294,8 @@ echo "  S3 bucket   : ${CACHE_BUCKET}"
 echo "  DynamoDB    : ${TABLE_NAME} (state), ${TRADES_TABLE} (trade history)"
 echo "  SNS topic   : ${TOPIC_ARN}"
 echo "  Lambda      : ${LAMBDA_FUNCTION}"
-echo "  EventBridge : quant-paper-tick (every 1 minute)"
-echo "  CloudWatch  : ${LOG_GROUP}"
+echo "  EventBridge : quant-paper-tick (every minute, US market hours, Mon-Fri)"
+echo "  CloudWatch  : ${LOG_GROUP} (14-day retention)"
 echo ""
 echo "Set these env vars to use AWS features locally:"
 echo "  export CACHE_BUCKET=${CACHE_BUCKET}"
