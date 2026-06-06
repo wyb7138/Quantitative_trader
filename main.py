@@ -6,6 +6,7 @@ Commands:
   backtest   Run historical backtest and plot equity curve
   signals    Show current indicator signals for the universe
   paper      Start paper trading loop (live data, simulated orders)
+  trades     View or export stored trade history
 
 Examples:
   python main.py backtest --start 2022-01-01 --end 2024-12-31
@@ -13,6 +14,9 @@ Examples:
   python main.py signals
   python main.py signals --symbols AAPL TSLA
   python main.py paper --poll 300
+  python main.py trades
+  python main.py trades --symbol AAPL
+  python main.py trades --export trades.csv
 """
 
 import argparse
@@ -171,6 +175,46 @@ def cmd_paper(args):
     run_paper_trading(symbols=symbols, poll_seconds=poll)
 
 
+# ── trades ─────────────────────────────────────────────────────────────────────
+
+def cmd_trades(args):
+    from paper_trader.trade_store import (
+        export_csv, get_recent_trades, get_trades_for_symbol, get_trade_stats,
+    )
+
+    if args.export:
+        path = export_csv(args.export)
+        print(f"Exported trades → {path}")
+        return
+
+    if args.symbol:
+        trades = get_trades_for_symbol(args.symbol, args.limit)
+    else:
+        trades = get_recent_trades(args.limit)
+
+    print("\n" + "=" * 70)
+    print(f"  TRADE HISTORY  ({len(trades)} shown)")
+    print("=" * 70)
+    if not trades:
+        print("  No trades recorded yet.")
+    else:
+        print(f"  {'Time':<20} {'Symbol':<7} {'Action':<10} {'Shares':>7} "
+              f"{'Price':>10} {'PnL':>12}")
+        print("  " + "-" * 66)
+        for t in trades:
+            pnl = t.get("pnl") or 0
+            print(f"  {str(t.get('time', '')):<20} {t.get('symbol', ''):<7} "
+                  f"{t.get('action', ''):<10} {t.get('shares', 0):>7} "
+                  f"${t.get('price', 0):>9.2f} ${pnl:>+11.2f}")
+
+    stats = get_trade_stats()
+    print("\n  " + "-" * 66)
+    print(f"  Closed trades: {stats['closed_trades']}   "
+          f"Win rate: {stats['win_rate'] * 100:.1f}%   "
+          f"Total PnL: ${stats['total_pnl']:+,.2f}   "
+          f"Avg PnL: ${stats['avg_pnl']:+,.2f}")
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -194,6 +238,13 @@ def main():
     pap.add_argument("--poll", type=int, metavar="SEC",
                      help="Poll interval in seconds (default from config)")
 
+    trd = sub.add_parser("trades", help="View / export stored trade history")
+    trd.add_argument("--symbol", metavar="SYM", help="Filter by one symbol")
+    trd.add_argument("--limit", type=int, default=50, metavar="N",
+                     help="Max trades to show (default 50)")
+    trd.add_argument("--export", metavar="PATH",
+                     help="Export all trades to a CSV file instead of printing")
+
     args = parser.parse_args()
 
     if args.command == "backtest":
@@ -202,6 +253,8 @@ def main():
         cmd_signals(args)
     elif args.command == "paper":
         cmd_paper(args)
+    elif args.command == "trades":
+        cmd_trades(args)
     else:
         parser.print_help()
 

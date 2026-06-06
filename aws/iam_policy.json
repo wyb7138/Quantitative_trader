@@ -16,8 +16,16 @@
     {
       "Sid": "DynamoDB",
       "Effect": "Allow",
-      "Action": ["dynamodb:GetItem", "dynamodb:PutItem"],
-      "Resource": "arn:aws:dynamodb:*:*:table/quant-paper-state"
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:Scan"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/quant-paper-state",
+        "arn:aws:dynamodb:*:*:table/quant-trades"
+      ]
     },
     {
       "Sid": "SNS",

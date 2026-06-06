@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+paper_trader/trades_log.json
+paper_trader/portfolio_state.json
+trades_export.csv

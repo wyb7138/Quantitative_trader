@@ -4,8 +4,9 @@ Deploy this function and trigger it with an EventBridge rule on a schedule
 (e.g. "rate(1 minute)") to replace the local infinite polling loop.
 
 Required environment variables on the Lambda function:
-  STATE_TABLE      – DynamoDB table name  (e.g. quant-paper-state)
-  CACHE_BUCKET     – S3 bucket for parquet cache  (e.g. my-quant-cache)
+  STATE_TABLE      – DynamoDB table for portfolio state  (e.g. quant-paper-state)
+  TRADES_TABLE     – DynamoDB table for trade history    (e.g. quant-trades)
+  CACHE_BUCKET     – S3 bucket for parquet cache         (e.g. my-quant-cache)
   ALERT_TOPIC_ARN  – SNS topic ARN for trade alerts
   CW_LOG_GROUP     – CloudWatch log group  (e.g. /quant/paper-trader)
 
