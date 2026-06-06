@@ -119,35 +119,21 @@ aws iam attach-role-policy \
 echo "→ Waiting for IAM role to propagate..."
 sleep 15
 
-# 6. Resolve the AWS-managed pandas/numpy/pyarrow Lambda Layer.
-# This layer ships pandas, numpy, and pyarrow pre-built for Linux x86_64,
-# so we don't have to bundle them ourselves (they account for ~200 MB of
-# the unzipped package and push it over Lambda's 262 MB hard limit).
-echo "→ Resolving AWSSDKPandas-Python312 Lambda Layer"
-PANDAS_LAYER=$(aws lambda list-layer-versions \
-  --layer-name "arn:aws:lambda:${REGION}:336392948345:layer:AWSSDKPandas-Python312" \
-  --region "${REGION}" \
-  --compatible-runtime python3.12 \
-  --query 'LayerVersions[0].LayerVersionArn' \
-  --output text 2>/dev/null || true)
-
-if [ -z "${PANDAS_LAYER}" ] || [ "${PANDAS_LAYER}" = "None" ]; then
-  echo "   WARNING: could not find AWSSDKPandas layer — bundling all deps (may exceed size limit)"
-  LAYER_ARGS=""
-else
-  echo "   Layer: ${PANDAS_LAYER}"
-  LAYER_ARGS="--layers ${PANDAS_LAYER}"
-fi
-
-# 7. Package and deploy Lambda
-# pandas / numpy / pyarrow come from the managed layer above.
-# matplotlib and tabulate are local-only; boto3 is built into the Lambda runtime.
+# 6. Package and deploy Lambda
+# The Lambda tick calls fetch(..., use_cache=False), which now skips all
+# parquet I/O, so pyarrow is not needed at runtime.  Stripping pyarrow
+# (~100 MB unzipped) and the local-only packages keeps the deployment well
+# under Lambda's 262 MB unzipped limit — no Lambda Layer required.
 echo "→ Packaging Lambda deployment zip (Linux x86_64 wheels)"
 rm -rf /tmp/lambda_pkg
 mkdir -p /tmp/lambda_pkg
 
-# Slim requirements: strip everything provided by the layer or the runtime
-grep -vE "^(pandas|numpy|pyarrow|matplotlib|tabulate|boto3)" requirements.txt \
+# Excluded from Lambda zip:
+#   pyarrow   — parquet cache; skipped when use_cache=False (Lambda always passes False)
+#   matplotlib — local backtest charts only
+#   tabulate   — local CLI display only
+#   boto3      — provided by the Lambda runtime
+grep -vE "^(pyarrow|matplotlib|tabulate|boto3)" requirements.txt \
   > /tmp/lambda_requirements.txt
 
 echo "   Installing slim dependencies..."
@@ -178,7 +164,7 @@ aws s3 cp /tmp/quant_lambda.zip "s3://${CACHE_BUCKET}/lambda/quant_lambda.zip" -
 echo "→ Lambda function: ${LAMBDA_FUNCTION}"
 ENV_VARS="Variables={CACHE_BUCKET=${CACHE_BUCKET},STATE_TABLE=${TABLE_NAME},TRADES_TABLE=${TRADES_TABLE},ALERT_TOPIC_ARN=${TOPIC_ARN},CW_LOG_GROUP=${LOG_GROUP}}"
 if aws lambda get-function --function-name "${LAMBDA_FUNCTION}" --region "${REGION}" 2>/dev/null; then
-  echo "   Already exists — updating code and layers."
+  echo "   Already exists — updating code."
   aws lambda update-function-code \
     --function-name "${LAMBDA_FUNCTION}" \
     --s3-bucket "${CACHE_BUCKET}" \
@@ -191,7 +177,6 @@ if aws lambda get-function --function-name "${LAMBDA_FUNCTION}" --region "${REGI
   aws lambda update-function-configuration \
     --function-name "${LAMBDA_FUNCTION}" \
     --environment "${ENV_VARS}" \
-    ${LAYER_ARGS} \
     --region "${REGION}"
 else
   aws lambda create-function \
@@ -203,13 +188,12 @@ else
     --timeout 300 \
     --memory-size 512 \
     --environment "${ENV_VARS}" \
-    ${LAYER_ARGS} \
     --region "${REGION}"
 fi
 
 LAMBDA_ARN="arn:aws:lambda:${REGION}:${ACCOUNT_ID}:function:${LAMBDA_FUNCTION}"
 
-# 7. EventBridge rule (put-rule is idempotent)
+# 7. EventBridge rule — put-rule is idempotent
 echo "→ EventBridge schedule (every 1 minute)"
 aws events put-rule \
   --name quant-paper-tick \

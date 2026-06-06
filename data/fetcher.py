@@ -92,11 +92,12 @@ def fetch(symbols, start=None, end=None, use_cache=True):
                 df.columns = df.columns.get_level_values(0)
             df.index = pd.to_datetime(df.index)
             df = df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
-            if use_s3:
-                _save_s3(df, sym, start, end)
-            else:
-                cache_path = f"{DATA['cache_dir']}/{sym}_{start}_{end}.parquet"
-                df.to_parquet(cache_path)
+            if use_cache:
+                if use_s3:
+                    _save_s3(df, sym, start, end)
+                else:
+                    cache_path = f"{DATA['cache_dir']}/{sym}_{start}_{end}.parquet"
+                    df.to_parquet(cache_path)
             result[sym] = df
         except Exception as e:
             print(f"  Warning: failed to fetch {sym}: {e}")
