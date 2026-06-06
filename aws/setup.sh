@@ -8,6 +8,10 @@
 
 set -uo pipefail
 
+# Disable the AWS CLI pager so commands print directly instead of opening
+# `less` (which otherwise freezes the script waiting for a keypress).
+export AWS_PAGER=""
+
 # ── Configuration — edit these ────────────────────────────────────────────────
 REGION="us-east-1"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
