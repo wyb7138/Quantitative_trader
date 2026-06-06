@@ -155,13 +155,17 @@ LAYER_ARN=$(aws lambda publish-layer-version \
 echo "   Layer ARN: ${LAYER_ARN}"
 
 # 6b. Build the slim function zip.
-# Install yfinance + transitive deps, then delete pandas/numpy (provided by
-# the layer above) to keep the function zip well under 250 MB unzipped.
+# Install yfinance with --no-deps so pip never pulls in pandas/numpy, then
+# install yfinance's non-pandas/numpy deps explicitly.  This avoids the
+# post-install rm dance that missed .dist-info, .libs dirs, etc.
+# curl_cffi (~40 MB unzipped) is the only heavy package here.
 echo "→ Packaging Lambda deployment zip (manylinux2014_x86_64 wheels)"
 rm -rf /tmp/lambda_pkg
 mkdir -p /tmp/lambda_pkg
 
+# yfinance itself is pure Python — install without pulling deps
 python3 -m pip install \
+  --no-deps \
   --platform manylinux2014_x86_64 \
   --target /tmp/lambda_pkg \
   --implementation cp \
@@ -170,9 +174,23 @@ python3 -m pip install \
   --upgrade \
   yfinance
 
-# Strip layer-provided packages so they aren't double-counted
-rm -rf /tmp/lambda_pkg/pandas /tmp/lambda_pkg/pandas.libs \
-       /tmp/lambda_pkg/numpy  /tmp/lambda_pkg/numpy.libs
+# yfinance runtime deps, excluding pandas/numpy (layer) and their sub-deps
+# (python-dateutil, pytz, tzdata, six) which are also installed by the layer.
+python3 -m pip install \
+  --platform manylinux2014_x86_64 \
+  --target /tmp/lambda_pkg \
+  --implementation cp \
+  --python-version 3.12 \
+  --only-binary=:all: \
+  --upgrade \
+  requests \
+  multitasking \
+  platformdirs \
+  peewee \
+  beautifulsoup4 \
+  curl_cffi \
+  protobuf \
+  websockets
 
 # Copy only the Python source modules Lambda needs
 cp -r backtest config.py data lambda_handler.py main.py paper_trader portfolio strategy \
