@@ -7,6 +7,7 @@ Commands:
   signals    Show current indicator signals for the universe
   paper      Start paper trading loop (live data, simulated orders)
   trades     View or export stored trade history
+  web        Launch the browser dashboard (Flask)
 
 Examples:
   python main.py backtest --start 2022-01-01 --end 2024-12-31
@@ -17,6 +18,7 @@ Examples:
   python main.py trades
   python main.py trades --symbol AAPL
   python main.py trades --export trades.csv
+  python main.py web --port 8080
 """
 
 import argparse
@@ -215,6 +217,16 @@ def cmd_trades(args):
           f"Avg PnL: ${stats['avg_pnl']:+,.2f}")
 
 
+# ── web ──────────────────────────────────────────────────────────────────────
+
+def cmd_web(args):
+    from web import create_app
+
+    app = create_app()
+    print(f"\n  Quant Trader dashboard → http://{args.host}:{args.port}\n")
+    app.run(host=args.host, port=args.port, debug=args.debug)
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 def main():
@@ -245,6 +257,11 @@ def main():
     trd.add_argument("--export", metavar="PATH",
                      help="Export all trades to a CSV file instead of printing")
 
+    web = sub.add_parser("web", help="Launch the browser dashboard")
+    web.add_argument("--host", default="127.0.0.1", help="Bind host (default 127.0.0.1)")
+    web.add_argument("--port", type=int, default=5000, help="Bind port (default 5000)")
+    web.add_argument("--debug", action="store_true", help="Enable Flask debug reloader")
+
     args = parser.parse_args()
 
     if args.command == "backtest":
@@ -255,6 +272,8 @@ def main():
         cmd_paper(args)
     elif args.command == "trades":
         cmd_trades(args)
+    elif args.command == "web":
+        cmd_web(args)
     else:
         parser.print_help()
 
