@@ -137,6 +137,9 @@ python3 -m pip install \
   --upgrade \
   pandas numpy
 
+# Remove any stale archive first — zip -r APPENDS to an existing file,
+# which would otherwise accumulate content across runs.
+rm -f /tmp/pandas_layer.zip
 cd /tmp/pandas_layer && zip -r /tmp/pandas_layer.zip python/ \
   -x "*.pyc" -x "*/__pycache__/*" -x "*.dist-info/*" > /dev/null
 cd - > /dev/null
@@ -204,6 +207,9 @@ echo "   Pre-zip contents (top items by size):"
 du -sh /tmp/lambda_pkg/* 2>/dev/null | sort -rh | head -15
 echo "   Total pre-zip: $(du -sh /tmp/lambda_pkg | cut -f1)"
 
+# Remove any stale archive first — zip -r APPENDS to an existing file,
+# which would otherwise accumulate content (and old deps) across runs.
+rm -f /tmp/quant_lambda.zip
 cd /tmp/lambda_pkg && zip -r /tmp/quant_lambda.zip . \
   -x "*.pyc" \
   -x "*/__pycache__/*" \
