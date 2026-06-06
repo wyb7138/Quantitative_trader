@@ -13,6 +13,7 @@ REGION="us-east-1"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 CACHE_BUCKET="quant-cache-${ACCOUNT_ID}"   # must be globally unique
 TABLE_NAME="quant-paper-state"
+TRADES_TABLE="quant-trades"
 SNS_TOPIC="quant-alerts"
 ALERT_EMAIL="your@email.com"               # change this
 LAMBDA_FUNCTION="quant-paper-trader"
@@ -38,7 +39,7 @@ aws s3api put-public-access-block --bucket "${CACHE_BUCKET}" \
   --public-access-block-configuration \
   "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 
-# 2. DynamoDB table for paper trading state
+# 2. DynamoDB table for paper trading state (single item, pk only)
 echo "→ DynamoDB table: ${TABLE_NAME}"
 if aws dynamodb describe-table --table-name "${TABLE_NAME}" --region "${REGION}" 2>/dev/null; then
   echo "   Already exists — skipping."
@@ -47,6 +48,19 @@ else
     --table-name "${TABLE_NAME}" \
     --attribute-definitions AttributeName=pk,AttributeType=S \
     --key-schema AttributeName=pk,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST \
+    --region "${REGION}"
+fi
+
+# 2b. DynamoDB table for trade history (pk + sk, sortable by time)
+echo "→ DynamoDB table: ${TRADES_TABLE}"
+if aws dynamodb describe-table --table-name "${TRADES_TABLE}" --region "${REGION}" 2>/dev/null; then
+  echo "   Already exists — skipping."
+else
+  aws dynamodb create-table \
+    --table-name "${TRADES_TABLE}" \
+    --attribute-definitions AttributeName=pk,AttributeType=S AttributeName=sk,AttributeType=S \
+    --key-schema AttributeName=pk,KeyType=HASH AttributeName=sk,KeyType=RANGE \
     --billing-mode PAY_PER_REQUEST \
     --region "${REGION}"
 fi
@@ -111,7 +125,7 @@ cd /tmp/lambda_pkg && zip -r /tmp/quant_lambda.zip . -x "*.git*" "data/cache/*" 
 cd - > /dev/null
 
 echo "→ Lambda function: ${LAMBDA_FUNCTION}"
-ENV_VARS="Variables={CACHE_BUCKET=${CACHE_BUCKET},STATE_TABLE=${TABLE_NAME},ALERT_TOPIC_ARN=${TOPIC_ARN},CW_LOG_GROUP=${LOG_GROUP}}"
+ENV_VARS="Variables={CACHE_BUCKET=${CACHE_BUCKET},STATE_TABLE=${TABLE_NAME},TRADES_TABLE=${TRADES_TABLE},ALERT_TOPIC_ARN=${TOPIC_ARN},CW_LOG_GROUP=${LOG_GROUP}}"
 if aws lambda get-function --function-name "${LAMBDA_FUNCTION}" --region "${REGION}" 2>/dev/null; then
   echo "   Already exists — updating code."
   aws lambda update-function-code \
@@ -163,7 +177,7 @@ echo "=== Setup complete ==="
 echo ""
 echo "Resources:"
 echo "  S3 bucket   : ${CACHE_BUCKET}"
-echo "  DynamoDB    : ${TABLE_NAME}"
+echo "  DynamoDB    : ${TABLE_NAME} (state), ${TRADES_TABLE} (trade history)"
 echo "  SNS topic   : ${TOPIC_ARN}"
 echo "  Lambda      : ${LAMBDA_FUNCTION}"
 echo "  EventBridge : quant-paper-tick (every 1 minute)"
@@ -172,5 +186,11 @@ echo ""
 echo "Set these env vars to use AWS features locally:"
 echo "  export CACHE_BUCKET=${CACHE_BUCKET}"
 echo "  export STATE_TABLE=${TABLE_NAME}"
+echo "  export TRADES_TABLE=${TRADES_TABLE}"
 echo "  export ALERT_TOPIC_ARN=${TOPIC_ARN}"
 echo "  export CW_LOG_GROUP=${LOG_GROUP}"
+echo ""
+echo "View stored trades any time with:"
+echo "  python main.py trades              # recent trades + stats"
+echo "  python main.py trades --symbol AAPL"
+echo "  python main.py trades --export trades.csv"

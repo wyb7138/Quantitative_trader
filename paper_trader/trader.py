@@ -15,6 +15,7 @@ import pandas as pd
 
 from config import PAPER, PORTFOLIO, STRATEGY, UNIVERSE
 from data.fetcher import fetch
+from paper_trader.trade_store import record_trade
 from strategy.signals import compute_signals, rank_symbols
 
 
@@ -192,8 +193,10 @@ def _tick(state: dict, symbols: list[str]) -> None:
             pnl = round(proceeds - shares * entry, 2)
             print(f"  STOP_LOSS {sym}: {shares} shares @ ${price:.2f}  PnL ${pnl:+,.2f}")
             trade = {"time": now, "symbol": sym, "action": "STOP_LOSS",
-                     "shares": shares, "price": round(price, 4), "pnl": pnl}
+                     "shares": shares, "price": round(price, 4),
+                     "entry_price": round(entry, 4), "pnl": pnl}
             state["trades"].append(trade)
+            record_trade(trade)
             _publish_trade(trade)
             _cw_log({"event": "trade", **trade})
 
@@ -208,8 +211,10 @@ def _tick(state: dict, symbols: list[str]) -> None:
             pnl = round(proceeds - shares * entry, 2)
             print(f"  SELL      {sym}: {shares} shares @ ${price:.2f}  PnL ${pnl:+,.2f}")
             trade = {"time": now, "symbol": sym, "action": "SELL",
-                     "shares": shares, "price": round(price, 4), "pnl": pnl}
+                     "shares": shares, "price": round(price, 4),
+                     "entry_price": round(entry, 4), "pnl": pnl}
             state["trades"].append(trade)
+            record_trade(trade)
             _publish_trade(trade)
             _cw_log({"event": "trade", **trade})
 
@@ -235,8 +240,10 @@ def _tick(state: dict, symbols: list[str]) -> None:
         state["entry_prices"][sym] = round(price, 4)
         print(f"  BUY       {sym}: {shares} shares @ ${price:.2f}")
         trade = {"time": now, "symbol": sym, "action": "BUY",
-                 "shares": shares, "price": round(price, 4), "pnl": 0}
+                 "shares": shares, "price": round(price, 4),
+                 "entry_price": round(price, 4), "pnl": 0}
         state["trades"].append(trade)
+        record_trade(trade)
         _publish_trade(trade)
         _cw_log({"event": "trade", **trade})
 
