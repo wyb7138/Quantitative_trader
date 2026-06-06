@@ -161,7 +161,9 @@ echo "   Layer ARN: ${LAYER_ARN}"
 # Install yfinance with --no-deps so pip never pulls in pandas/numpy, then
 # install yfinance's non-pandas/numpy deps explicitly.  This avoids the
 # post-install rm dance that missed .dist-info, .libs dirs, etc.
-# curl_cffi (~40 MB unzipped) is the only heavy package here.
+# curl_cffi is intentionally omitted: its bundled libcurl fails to load on
+# Lambda AL2023 (OpenSSL/TLS mismatch), and yfinance gracefully falls back
+# to plain requests, which works fine for our polling cadence.
 echo "→ Packaging Lambda deployment zip (manylinux2014_x86_64 wheels)"
 rm -rf /tmp/lambda_pkg
 mkdir -p /tmp/lambda_pkg
@@ -191,7 +193,6 @@ python3 -m pip install \
   platformdirs \
   peewee \
   beautifulsoup4 \
-  curl_cffi \
   protobuf \
   websockets
 
