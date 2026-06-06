@@ -17,6 +17,7 @@ Examples:
 
 import argparse
 import datetime
+import os
 import sys
 
 
@@ -107,6 +108,17 @@ def cmd_backtest(args):
     out = "backtest_results.png"
     plt.savefig(out, dpi=150, bbox_inches="tight")
     print(f"\n  Equity curve saved → {out}")
+
+    bucket = os.environ.get("CACHE_BUCKET", "")
+    if bucket:
+        import boto3
+        s3 = boto3.client("s3")
+        s3_key = f"reports/backtest_{start}_{end}.png"
+        try:
+            s3.upload_file(out, bucket, s3_key)
+            print(f"  Chart uploaded    → s3://{bucket}/{s3_key}")
+        except Exception as e:
+            print(f"  Warning: S3 upload failed: {e}")
 
 
 # ── signals ─────────────────────────────────────────────────────────────────
