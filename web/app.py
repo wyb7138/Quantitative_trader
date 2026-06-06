@@ -14,6 +14,7 @@ Routes
 import traceback
 
 from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import HTTPException
 
 from web import services
 
@@ -77,9 +78,16 @@ def create_app() -> Flask:
     def paper_tick():
         return jsonify(services.run_paper_tick())
 
+    # ── favicon ──────────────────────────────────────────────────────────
+    @app.get("/favicon.ico")
+    def favicon():
+        return "", 204
+
     # ── errors ───────────────────────────────────────────────────────────
     @app.errorhandler(Exception)
     def handle_error(exc):
+        if isinstance(exc, HTTPException):
+            return jsonify({"error": exc.description}), exc.code
         app.logger.error("Unhandled error: %s\n%s", exc, traceback.format_exc())
         return jsonify({"error": str(exc)}), 500
 
