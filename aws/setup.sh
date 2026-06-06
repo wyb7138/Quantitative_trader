@@ -120,13 +120,38 @@ echo "→ Waiting for IAM role to propagate..."
 sleep 15
 
 # 6. Package and deploy Lambda
-echo "→ Packaging Lambda deployment zip"
+# Install Linux x86_64 wheels (avoids Mac-compiled binaries that won't run on Lambda).
+# Exclude matplotlib — it's only used for backtest charts, not the Lambda tick function.
+echo "→ Packaging Lambda deployment zip (Linux x86_64 wheels)"
 rm -rf /tmp/lambda_pkg
 mkdir -p /tmp/lambda_pkg
-python3 -m pip install --quiet -r requirements.txt -t /tmp/lambda_pkg
+
+# Build a requirements file without matplotlib for the Lambda package
+grep -v "^matplotlib" requirements.txt > /tmp/lambda_requirements.txt
+
+python3 -m pip install \
+  --platform linux_x86_64 \
+  --target /tmp/lambda_pkg \
+  --implementation cp \
+  --python-version 3.12 \
+  --only-binary=:all: \
+  --upgrade \
+  --quiet \
+  -r /tmp/lambda_requirements.txt
+
+# Copy application source (exclude git metadata, local cache, and test artifacts)
 cp -r . /tmp/lambda_pkg/
-cd /tmp/lambda_pkg && zip -r /tmp/quant_lambda.zip . -x "*.git*" "data/cache/*" > /dev/null
+cd /tmp/lambda_pkg && zip -r /tmp/quant_lambda.zip . \
+  -x "*.git*" "data/cache/*" "*.pyc" "__pycache__/*" "backtest_results.png" \
+  > /dev/null
 cd - > /dev/null
+
+ZIP_SIZE=$(du -sh /tmp/quant_lambda.zip | cut -f1)
+echo "   Zip size: ${ZIP_SIZE}"
+
+# Upload zip to S3 first (bypasses the 70 MB direct-upload limit)
+echo "→ Uploading deployment zip to S3"
+aws s3 cp /tmp/quant_lambda.zip "s3://${CACHE_BUCKET}/lambda/quant_lambda.zip" --region "${REGION}"
 
 echo "→ Lambda function: ${LAMBDA_FUNCTION}"
 ENV_VARS="Variables={CACHE_BUCKET=${CACHE_BUCKET},STATE_TABLE=${TABLE_NAME},TRADES_TABLE=${TRADES_TABLE},ALERT_TOPIC_ARN=${TOPIC_ARN},CW_LOG_GROUP=${LOG_GROUP}}"
@@ -134,7 +159,8 @@ if aws lambda get-function --function-name "${LAMBDA_FUNCTION}" --region "${REGI
   echo "   Already exists — updating code."
   aws lambda update-function-code \
     --function-name "${LAMBDA_FUNCTION}" \
-    --zip-file fileb:///tmp/quant_lambda.zip \
+    --s3-bucket "${CACHE_BUCKET}" \
+    --s3-key "lambda/quant_lambda.zip" \
     --region "${REGION}"
   aws lambda update-function-configuration \
     --function-name "${LAMBDA_FUNCTION}" \
@@ -146,7 +172,7 @@ else
     --runtime python3.12 \
     --role "${ROLE_ARN}" \
     --handler lambda_handler.handler \
-    --zip-file fileb:///tmp/quant_lambda.zip \
+    --code "S3Bucket=${CACHE_BUCKET},S3Key=lambda/quant_lambda.zip" \
     --timeout 300 \
     --memory-size 512 \
     --environment "${ENV_VARS}" \
