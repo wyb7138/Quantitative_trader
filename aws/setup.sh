@@ -119,26 +119,48 @@ aws iam attach-role-policy \
 echo "→ Waiting for IAM role to propagate..."
 sleep 15
 
-# 6. Package and deploy Lambda
-# The Lambda tick calls fetch(..., use_cache=False), which now skips all
-# parquet I/O, so pyarrow is not needed at runtime.  Stripping pyarrow
-# (~100 MB unzipped) and the local-only packages keeps the deployment well
-# under Lambda's 262 MB unzipped limit — no Lambda Layer required.
+# 6a. Build a pandas/numpy Lambda layer.
+# yfinance 1.x pulls in curl_cffi (native libcurl) which, combined with
+# pandas and numpy, pushes the single-zip unzipped size past Lambda's 250 MB
+# limit.  Moving pandas + numpy to a dedicated layer keeps each artefact
+# well under its own 250 MB quota.
+echo "→ Building pandas/numpy Lambda layer (manylinux2014_x86_64)"
+rm -rf /tmp/pandas_layer
+mkdir -p /tmp/pandas_layer/python
+
+python3 -m pip install \
+  --platform manylinux2014_x86_64 \
+  --target /tmp/pandas_layer/python \
+  --implementation cp \
+  --python-version 3.12 \
+  --only-binary=:all: \
+  --upgrade \
+  pandas numpy
+
+cd /tmp/pandas_layer && zip -r /tmp/pandas_layer.zip python/ \
+  -x "*.pyc" -x "*/__pycache__/*" -x "*.dist-info/*" > /dev/null
+cd - > /dev/null
+echo "   Layer zip: $(du -sh /tmp/pandas_layer.zip | cut -f1)"
+
+aws s3 cp /tmp/pandas_layer.zip "s3://${CACHE_BUCKET}/lambda/pandas_layer.zip" --region "${REGION}"
+
+LAYER_ARN=$(aws lambda publish-layer-version \
+  --layer-name "quant-pandas-numpy" \
+  --description "pandas + numpy for quant-paper-trader (manylinux2014_x86_64, python3.12)" \
+  --content "S3Bucket=${CACHE_BUCKET},S3Key=lambda/pandas_layer.zip" \
+  --compatible-runtimes python3.12 \
+  --region "${REGION}" \
+  --query LayerVersionArn \
+  --output text)
+echo "   Layer ARN: ${LAYER_ARN}"
+
+# 6b. Build the slim function zip.
+# Install yfinance + transitive deps, then delete pandas/numpy (provided by
+# the layer above) to keep the function zip well under 250 MB unzipped.
 echo "→ Packaging Lambda deployment zip (manylinux2014_x86_64 wheels)"
 rm -rf /tmp/lambda_pkg
 mkdir -p /tmp/lambda_pkg
 
-# Excluded from Lambda zip:
-#   pyarrow    — parquet cache; skipped when use_cache=False (Lambda always passes False)
-#   matplotlib — local backtest charts only
-#   tabulate   — local CLI display only
-#   boto3      — provided by the Lambda runtime
-grep -vE "^(pyarrow|matplotlib|tabulate|boto3)" requirements.txt \
-  > /tmp/lambda_requirements.txt
-
-# manylinux2014_x86_64 matches the manylinux wheel tags on PyPI.
-# linux_x86_64 alone does not match any published wheel and causes pip to fail.
-echo "   Installing slim dependencies..."
 python3 -m pip install \
   --platform manylinux2014_x86_64 \
   --target /tmp/lambda_pkg \
@@ -146,11 +168,13 @@ python3 -m pip install \
   --python-version 3.12 \
   --only-binary=:all: \
   --upgrade \
-  -r /tmp/lambda_requirements.txt
+  yfinance
 
-# Copy only the Python source modules Lambda needs.
-# Explicit list avoids accidentally bundling venvs, local caches, or other
-# large non-runtime directories that cp -r . would pick up.
+# Strip layer-provided packages so they aren't double-counted
+rm -rf /tmp/lambda_pkg/pandas /tmp/lambda_pkg/pandas.libs \
+       /tmp/lambda_pkg/numpy  /tmp/lambda_pkg/numpy.libs
+
+# Copy only the Python source modules Lambda needs
 cp -r backtest config.py data lambda_handler.py main.py paper_trader portfolio strategy \
   /tmp/lambda_pkg/
 
@@ -164,28 +188,28 @@ cd /tmp/lambda_pkg && zip -r /tmp/quant_lambda.zip . \
 cd - > /dev/null
 
 ZIP_SIZE=$(du -sh /tmp/quant_lambda.zip | cut -f1)
-echo "   Zip size: ${ZIP_SIZE}"
+echo "   Function zip: ${ZIP_SIZE}"
 
-# Upload zip to S3 first (bypasses the 70 MB direct-upload limit)
+# Upload zip to S3 (bypasses the 50 MB direct-upload limit)
 echo "→ Uploading deployment zip to S3"
 aws s3 cp /tmp/quant_lambda.zip "s3://${CACHE_BUCKET}/lambda/quant_lambda.zip" --region "${REGION}"
 
 echo "→ Lambda function: ${LAMBDA_FUNCTION}"
 ENV_VARS="Variables={CACHE_BUCKET=${CACHE_BUCKET},STATE_TABLE=${TABLE_NAME},TRADES_TABLE=${TRADES_TABLE},ALERT_TOPIC_ARN=${TOPIC_ARN},CW_LOG_GROUP=${LOG_GROUP}}"
 if aws lambda get-function --function-name "${LAMBDA_FUNCTION}" --region "${REGION}" 2>/dev/null; then
-  echo "   Already exists — updating code."
+  echo "   Already exists — updating code and layers."
   aws lambda update-function-code \
     --function-name "${LAMBDA_FUNCTION}" \
     --s3-bucket "${CACHE_BUCKET}" \
     --s3-key "lambda/quant_lambda.zip" \
     --region "${REGION}"
-  # Wait for the code update to finish before updating configuration
   aws lambda wait function-updated \
     --function-name "${LAMBDA_FUNCTION}" \
     --region "${REGION}"
   aws lambda update-function-configuration \
     --function-name "${LAMBDA_FUNCTION}" \
     --environment "${ENV_VARS}" \
+    --layers "${LAYER_ARN}" \
     --region "${REGION}"
 else
   aws lambda create-function \
@@ -197,6 +221,7 @@ else
     --timeout 300 \
     --memory-size 512 \
     --environment "${ENV_VARS}" \
+    --layers "${LAYER_ARN}" \
     --region "${REGION}"
 fi
 
