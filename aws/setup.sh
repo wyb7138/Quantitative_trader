@@ -124,33 +124,42 @@ sleep 15
 # parquet I/O, so pyarrow is not needed at runtime.  Stripping pyarrow
 # (~100 MB unzipped) and the local-only packages keeps the deployment well
 # under Lambda's 262 MB unzipped limit — no Lambda Layer required.
-echo "→ Packaging Lambda deployment zip (Linux x86_64 wheels)"
+echo "→ Packaging Lambda deployment zip (manylinux2014_x86_64 wheels)"
 rm -rf /tmp/lambda_pkg
 mkdir -p /tmp/lambda_pkg
 
 # Excluded from Lambda zip:
-#   pyarrow   — parquet cache; skipped when use_cache=False (Lambda always passes False)
+#   pyarrow    — parquet cache; skipped when use_cache=False (Lambda always passes False)
 #   matplotlib — local backtest charts only
 #   tabulate   — local CLI display only
 #   boto3      — provided by the Lambda runtime
 grep -vE "^(pyarrow|matplotlib|tabulate|boto3)" requirements.txt \
   > /tmp/lambda_requirements.txt
 
+# manylinux2014_x86_64 matches the manylinux wheel tags on PyPI.
+# linux_x86_64 alone does not match any published wheel and causes pip to fail.
 echo "   Installing slim dependencies..."
 python3 -m pip install \
-  --platform linux_x86_64 \
+  --platform manylinux2014_x86_64 \
   --target /tmp/lambda_pkg \
   --implementation cp \
   --python-version 3.12 \
   --only-binary=:all: \
   --upgrade \
-  --quiet \
-  -r /tmp/lambda_requirements.txt 2>&1 | grep -v "^\[notice\]" || true
+  -r /tmp/lambda_requirements.txt
 
-# Copy application source (exclude git metadata, local cache, and test artifacts)
-cp -r . /tmp/lambda_pkg/
+# Copy only the Python source modules Lambda needs.
+# Explicit list avoids accidentally bundling venvs, local caches, or other
+# large non-runtime directories that cp -r . would pick up.
+cp -r backtest config.py data lambda_handler.py main.py paper_trader portfolio strategy \
+  /tmp/lambda_pkg/
+
 cd /tmp/lambda_pkg && zip -r /tmp/quant_lambda.zip . \
-  -x "*.git*" "data/cache/*" "*.pyc" "__pycache__/*" "backtest_results.png" \
+  -x "*.git*" \
+  -x "data/cache/*" \
+  -x "*.pyc" \
+  -x "*/__pycache__/*" \
+  -x "*.dist-info/*" \
   > /dev/null
 cd - > /dev/null
 
